@@ -37,7 +37,7 @@ PY_GO_VERSION
 systemctl is-active --quiet apache2 || fail "Apache must already be running."
 systemctl is-active --quiet mysql || systemctl is-active --quiet mariadb || fail "MySQL/MariaDB must already be running."
 
-# This deployment uses HTTPS/WSS only. It deliberately does not change UFW or the existing RustDesk services.
+# This deployment uses HTTPS/WSS only. It deliberately does not change UFW.
 echo "Repository: $REPO_ROOT"
 echo "Domain:     $DOMAIN"
 echo "Building server..."
@@ -208,15 +208,17 @@ for i in {1..30}; do
 done
 curl -fsS http://127.0.0.1:8787/api/health >/dev/null || { journalctl -u remote-assist.service -n 80 --no-pager; fail "Support service failed health check."; }
 
-CERT_ROOT=""
-for name in "remote-assist-$DOMAIN" "$DOMAIN"; do
-  if [[ -s "/etc/letsencrypt/live/$name/fullchain.pem" && -s "/etc/letsencrypt/live/$name/privkey.pem" ]]; then CERT_ROOT="/etc/letsencrypt/live/$name"; break; fi
-done
-[[ -n "$CERT_ROOT" ]] || fail "No existing Let's Encrypt certificate found for $DOMAIN. Obtain one first, then rerun."
+CERT_ROOT="${TLS_CERT_DIR:-}"
+if [[ -n "$CERT_ROOT" ]]; then
+  [[ -s "$CERT_ROOT/fullchain.pem" && -s "$CERT_ROOT/privkey.pem" ]] || fail "TLS_CERT_DIR must contain fullchain.pem and privkey.pem."
+elif [[ -s "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" && -s "/etc/letsencrypt/live/$DOMAIN/privkey.pem" ]]; then
+  CERT_ROOT="/etc/letsencrypt/live/$DOMAIN"
+fi
+[[ -n "$CERT_ROOT" ]] || fail "No TLS certificate found for $DOMAIN. Obtain one first or set TLS_CERT_DIR, then rerun."
 
 a2enmod proxy proxy_http proxy_wstunnel headers rewrite ssl >/dev/null
 if [[ -f "$VHOST" ]]; then
-  if ! grep -Eq 'remote-assist-root-vultr-v1|Remote Assist attended remote support' "$VHOST"; then
+  if ! grep -Fq 'Remote Assist attended remote support' "$VHOST"; then
     fail "$VHOST exists but is not recognized as an Remote Assist-managed vhost. Refusing to overwrite it."
   fi
   cp -a "$VHOST" "/root/remote-assist-vhost-$(date +%Y%m%d-%H%M%S).conf"
@@ -271,7 +273,7 @@ echo "Console: https://$DOMAIN"
 echo "Service: remote-assist.service"
 echo "Config:  $ENV_FILE"
 echo "Agent:   $DOWNLOAD_DIR/RemoteAssist.exe"
-echo "RustDesk services and firewall rules were not changed."
+echo "Firewall rules were not changed."
 if (( NEW_CREDS )); then
   echo
   echo "SAVE THESE TECHNICIAN CREDENTIALS NOW:"

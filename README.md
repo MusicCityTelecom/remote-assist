@@ -45,6 +45,16 @@ See [Architecture](docs/ARCHITECTURE.md), [Protocol](docs/PROTOCOL.md), [Operati
 - A public DNS name
 - A valid TLS certificate for that DNS name
 
+A typical Ubuntu host can install the service prerequisites with:
+
+```bash
+sudo apt update
+sudo apt install -y apache2 mariadb-server curl openssl git golang-go python3
+sudo systemctl enable --now apache2 mariadb
+```
+
+Obtain a trusted TLS certificate with your preferred ACME client before running the installer. By default, Remote Assist looks for `/etc/letsencrypt/live/<your-domain>/fullchain.pem` and `privkey.pem`. If your certificate lives elsewhere, pass `TLS_CERT_DIR=/path/to/certificate-directory`.
+
 ## Quick deployment
 
 Clone this repository using its GitHub URL, then set the public support hostname:
@@ -53,9 +63,11 @@ Clone this repository using its GitHub URL, then set the public support hostname
 git clone https://github.com/<owner>/remote-assist.git
 cd remote-assist
 sudo SUPPORT_DOMAIN=support.example.com bash deploy/install-vps.sh
+# Or, for a certificate stored elsewhere:
+# sudo SUPPORT_DOMAIN=support.example.com TLS_CERT_DIR=/etc/ssl/remote-assist bash deploy/install-vps.sh
 ```
 
-The installer builds/tests the Go server, creates a dedicated `remote-assist` system account, creates the `remote_assist` database/user on first install, generates bootstrap secrets, installs a hardened systemd service, and writes an Apache HTTPS/WSS reverse-proxy vhost. It expects a certificate to already exist under `/etc/letsencrypt/live/` and does not alter UFW.
+The installer builds/tests the Go server, creates a dedicated `remote-assist` system account, creates the `remote_assist` database/user on first install, generates bootstrap secrets, installs a hardened systemd service, and writes an Apache HTTPS/WSS reverse-proxy vhost. It requires an existing TLS certificate and does not alter UFW.
 
 After deployment:
 

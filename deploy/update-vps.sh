@@ -5,6 +5,7 @@ export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_ROOT=/opt/remote-assist
+ENV_FILE=/etc/remote-assist-app/app.env
 BIN="$APP_ROOT/bin/remote-assist-server"
 NEW_BIN="$APP_ROOT/bin/remote-assist-server.new"
 DOWNLOAD="$APP_ROOT/downloads/RemoteAssist.exe"
@@ -143,7 +144,15 @@ download_release_asset "Technician portable" "$TECH_PORTABLE_URL" "$TECH_PORTABL
 download_release_asset "Technician installer" "$TECH_INSTALLER_URL" "$TECH_INSTALLER" pe
 
 apache2ctl configtest
-if [[ -n "${PUBLIC_BASE_URL:-}" ]]; then curl -fsS "${PUBLIC_BASE_URL%/}/api/health"; else echo "PUBLIC_BASE_URL not set; skipped public HTTPS health check."; fi
+PUBLIC_HEALTH_BASE="${PUBLIC_BASE_URL:-}"
+if [[ -z "$PUBLIC_HEALTH_BASE" && -r "$ENV_FILE" ]]; then
+  PUBLIC_HEALTH_BASE="$(sed -n 's/^PUBLIC_BASE_URL=//p' "$ENV_FILE" | tail -n 1)"
+fi
+if [[ -n "$PUBLIC_HEALTH_BASE" ]]; then
+  curl -fsS "${PUBLIC_HEALTH_BASE%/}/api/health"
+else
+  echo "PUBLIC_BASE_URL not set; skipped public HTTPS health check."
+fi
 echo
 echo "Update complete."
 echo "Backup/rollback evidence: $BACKUP"
