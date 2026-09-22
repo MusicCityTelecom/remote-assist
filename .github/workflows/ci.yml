@@ -1,0 +1,188 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: rootpass
+          MYSQL_DATABASE: remote_assist_ci
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -prootpass"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      REMOTE_ASSIST_TEST_MYSQL_DSN: "root:rootpass@tcp(127.0.0.1:3306)/remote_assist_ci?parseTime=true&loc=UTC&charset=utf8mb4"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate shell scripts
+        run: bash -n deploy/*.sh
+      - name: Validate technician console JavaScript
+        run: node --check internal/webui/web/app.js
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - run: go mod download
+      - run: go test ./...
+      - run: go vet ./...
+      - run: go build -trimpath -o dist/remote-assist-server ./cmd/server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: remote-assist-server-linux-amd64
+          path: dist/remote-assist-server
+
+  windows-agent:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore
+        run: dotnet restore agent/RemoteAssist.Agent.csproj
+      - name: Publish Windows x64 single-file agent
+        run: dotnet publish agent/RemoteAssist.Agent.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o dist/agent
+      - name: Normalize artifact filename
+        shell: pwsh
+        run: |
+          Copy-Item dist/agent/RemoteAssist.exe dist/Remote-Assist.exe
+          Get-FileHash dist/Remote-Assist.exe -Algorithm SHA256 | Format-List
+      - name: Verify customer client identity
+        shell: pwsh
+        run: |
+          $path = Resolve-Path 'dist/Remote-Assist.exe'
+          $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($path)
+          Write-Host "ProductName:     $($info.ProductName)"
+          Write-Host "CompanyName:     $($info.CompanyName)"
+          Write-Host "Description:     $($info.FileDescription)"
+          Write-Host "FileVersion:     $($info.FileVersion)"
+          Write-Host "ProductVersion:  $($info.ProductVersion)"
+          if ($info.ProductName -ne 'Remote Assist') { throw "Unexpected ProductName: $($info.ProductName)" }
+          if ($info.CompanyName -ne 'Remote Assist') { throw "Unexpected CompanyName: $($info.CompanyName)" }
+          if ($info.FileVersion -ne '0.10.0.0') { throw "Unexpected FileVersion: $($info.FileVersion)" }
+          $signature = Get-AuthenticodeSignature $path
+          Write-Host "Authenticode:    $($signature.Status)"
+          if ($signature.SignerCertificate) {
+            Write-Host "Signer subject:  $($signature.SignerCertificate.Subject)"
+          } else {
+            Write-Host "Signer subject:  (not signed yet)"
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Remote Assist-Remote-Support-Windows-x64
+          path: dist/Remote-Assist.exe
+
+  windows-technician:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore technician client
+        run: dotnet restore technician/RemoteAssist.Technician.csproj
+      - name: Publish technician client
+        run: dotnet publish technician/RemoteAssist.Technician.csproj -c Release -r win-x64 --self-contained true -o dist/technician
+      - name: Verify technician client
+        shell: pwsh
+        run: |
+          $exe = 'dist/technician/RemoteAssistTechnician.exe'
+          if (-not (Test-Path $exe)) { throw "Technician executable was not published." }
+          $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe))
+          Write-Host "ProductName: $($info.ProductName)"
+          Write-Host "CompanyName: $($info.CompanyName)"
+          Write-Host "FileVersion: $($info.FileVersion)"
+          if ($info.ProductName -ne 'Remote Assist Technician') {
+            throw "Unexpected technician ProductName: $($info.ProductName)"
+          }
+          if ($info.CompanyName -ne 'Remote Assist') {
+            throw "Unexpected technician CompanyName: $($info.CompanyName)"
+          }
+          if ($info.FileVersion -ne '0.10.0.0') {
+            throw "Unexpected technician FileVersion: $($info.FileVersion)"
+          }
+          $signature = Get-AuthenticodeSignature $exe
+          Write-Host "Authenticode: $($signature.Status)"
+          if ($signature.SignerCertificate) {
+            Write-Host "Signer subject: $($signature.SignerCertificate.Subject)"
+          } else {
+            Write-Host "Signer subject: (not signed yet)"
+          }
+          Get-FileHash $exe -Algorithm SHA256 | Format-List
+      - name: Build portable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive -Path dist/technician/* -DestinationPath dist/Remote-Assist-Technician-Portable.zip -Force
+          Get-FileHash dist/Remote-Assist-Technician-Portable.zip -Algorithm SHA256 | Format-List
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup compiler not found." }
+          New-Item -ItemType Directory -Force -Path dist/installer | Out-Null
+          $publish = (Resolve-Path dist/technician).Path
+          $output = (Resolve-Path dist/installer).Path
+          & $iscc "/DPublishDir=$publish" "/DOutputDir=$output" technician/installer.iss
+          if ($LASTEXITCODE -ne 0) { throw "Inno Setup failed with exit $LASTEXITCODE" }
+          $installerSource = Get-Content technician/installer.iss -Raw
+          if ($installerSource -notmatch '#define MyAppVersion "0\.10\.0-preview"') {
+            throw "Technician installer AppVersion is not 0.10.0-preview."
+          }
+          $installer = 'dist/installer/Remote-Assist-Technician-Setup.exe'
+          if (-not (Test-Path $installer)) { throw "Technician installer was not created." }
+          Copy-Item $installer dist/Remote-Assist-Technician-Setup.exe -Force
+          Get-FileHash dist/Remote-Assist-Technician-Setup.exe -Algorithm SHA256 | Format-List
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Remote Assist-Support-Technician-Windows-x64
+          path: |
+            dist/Remote-Assist-Technician-Portable.zip
+            dist/Remote-Assist-Technician-Setup.exe
+
+  preview-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [server, windows-agent, windows-technician]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: Remote Assist-Remote-Support-Windows-x64
+          path: release
+      - uses: actions/download-artifact@v4
+        with:
+          name: Remote Assist-Support-Technician-Windows-x64
+          path: release-tech
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: preview-latest
+          name: Remote Assist MVP (latest main build)
+          prerelease: true
+          make_latest: false
+          files: |
+            release/Remote-Assist.exe
+            release-tech/Remote-Assist-Technician-Portable.zip
+            release-tech/Remote-Assist-Technician-Setup.exe

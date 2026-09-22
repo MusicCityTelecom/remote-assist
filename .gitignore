@@ -1,0 +1,28 @@
+# Go
+/bin/
+*.test
+coverage.out
+
+# .NET
+agent/bin/
+agent/obj/
+*.user
+*.suo
+
+# Runtime/config
+.env
+*.env
+*.local
+*.pid
+*.log
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build artifacts
+/dist/
+/artifacts/
+/downloads/

@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Remote Assist</title>
+  <meta name="description" content="Attended remote support by Remote Assist Project.">
+  <link rel="stylesheet" href="/app.css">
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="topbar">
+      <a href="/" class="brand" aria-label="Remote Assist home">
+        <span class="brand-main">inn<span>aware</span></span>
+        <small>REMOTE SUPPORT</small>
+      </a>
+      <div class="top-actions">
+        <span id="whoami" class="whoami"></span>
+        <button id="accountButton" class="ghost hidden" type="button">Account</button>
+        <button id="logoutButton" class="ghost hidden" type="button">Sign out</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="publicView" class="public-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">REMOTE ASSIST / ATTENDED SUPPORT</p>
+          <h1>Remote help without the <em>guesswork.</em></h1>
+          <p class="lead">A Remote Assist Project technician will give you a temporary support code. Download the Remote Assist app, enter the code, review the requested access, and approve the session.</p>
+          <div class="safety-note">
+            <strong>You stay in control.</strong>
+            <span>The session is temporary and requires your approval. You can close the support app to disconnect.</span>
+          </div>
+        </div>
+        <aside class="download-card">
+          <span class="badge">WINDOWS SUPPORT APP</span>
+          <div class="download-icon">↘</div>
+          <h2>Start a support session</h2>
+          <p id="downloadText">Checking whether the Windows support app is available…</p>
+          <a id="downloadButton" class="primary disabled" href="/download/windows" aria-disabled="true">Download for Windows <span>↓</span></a>
+          <p class="small">The support app does not install a permanent remote-access password.</p>
+          <a class="terms-link" href="/terms.html">Remote support terms &amp; privacy</a>
+        </aside>
+      </section>
+
+      <section id="loginView" class="login-panel">
+        <div>
+          <p class="eyebrow">TECHNICIAN ACCESS</p>
+          <h2>Support operations console</h2>
+          <p>Sign in to create attended sessions, review support history, document work, and manage the support team.</p>
+        </div>
+        <form id="loginForm" autocomplete="on">
+          <label>Username<input id="username" name="username" autocomplete="username" required></label>
+          <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
+          <button class="primary" type="submit">Sign in</button>
+          <p id="loginError" class="error" role="alert"></p>
+        </form>
+      </section>
+
+      <section id="consoleView" class="hidden">
+        <div class="console-head">
+          <div>
+            <p class="eyebrow">TECHNICIAN CONSOLE</p>
+            <h1>Support operations</h1>
+          </div>
+          <div class="console-head-actions">
+            <a id="techPortableDownload" class="ghost hidden" href="/download/technician/portable">Portable app</a>
+            <a id="techInstallerDownload" class="ghost hidden" href="/download/technician/installer">Technician installer</a>
+            <button id="newSessionButton" class="primary" type="button">+ New session</button>
+          </div>
+        </div>
+
+        <nav class="console-tabs" aria-label="Support console sections">
+          <button class="tab active" data-tab="sessions" type="button">Live Sessions</button>
+          <button class="tab" data-tab="history" type="button">History</button>
+          <button id="teamTabButton" class="tab admin-only hidden" data-tab="team" type="button">Team</button>
+          <button id="auditTabButton" class="tab admin-only hidden" data-tab="audit" type="button">Audit</button>
+        </nav>
+
+        <section id="sessionsTab" class="tab-panel">
+          <div class="metrics metrics-five">
+            <div><strong id="waitingMetric">0</strong><span>Waiting / approved</span></div>
+            <div><strong id="connectedMetric">0</strong><span>Connected now</span></div>
+            <div><strong id="todayMetric">0</strong><span>Created today</span></div>
+            <div><strong id="weekMetric">0</strong><span>Completed 7 days</span></div>
+            <div><strong id="avgMetric">—</strong><span>Average support time</span></div>
+          </div>
+          <div class="section-head">
+            <div><h2>Active sessions</h2><p>Waiting, approved, and currently connected support requests.</p></div>
+            <button id="refreshSessionsButton" class="ghost" type="button">Refresh</button>
+          </div>
+          <div id="sessionsList" class="sessions-list"></div>
+        </section>
+
+        <section id="historyTab" class="tab-panel hidden">
+          <div class="section-head">
+            <div><h2>Session history</h2><p>Search completed, expired, and active support sessions.</p></div>
+            <button id="exportHistoryButton" class="ghost" type="button">Export CSV</button>
+          </div>
+          <form id="historyFilters" class="filter-bar">
+            <label class="filter-search">Search<input id="historySearch" placeholder="Property, computer, technician, code suffix"></label>
+            <label>Status
+              <select id="historyStatus">
+                <option value="all">All</option>
+                <option value="active">Active</option>
+                <option value="connected">Connected</option>
+                <option value="waiting">Waiting</option>
+                <option value="approved">Approved</option>
+                <option value="ended">Ended</option>
+                <option value="expired">Expired</option>
+              </select>
+            </label>
+            <label>Technician<select id="historyTechnician"><option value="">All technicians</option></select></label>
+            <label>From<input id="historyFrom" type="date"></label>
+            <label>To<input id="historyTo" type="date"></label>
+            <button class="primary filter-submit" type="submit">Apply</button>
+          </form>
+          <div class="history-summary"><span id="historyCount">0 sessions</span><span id="historyRange"></span></div>
+          <div id="historyList" class="sessions-list"></div>
+          <div class="pager">
+            <button id="historyPrev" class="ghost" type="button">← Previous</button>
+            <span id="historyPage">Page 1</span>
+            <button id="historyNext" class="ghost" type="button">Next →</button>
+          </div>
+        </section>
+
+        <section id="teamTab" class="tab-panel hidden admin-only">
+          <div class="section-head">
+            <div><h2>Support team</h2><p>Create technician accounts, assign roles, disable access, and reset passwords.</p></div>
+            <button id="addAdminButton" class="primary" type="button">+ Add user</button>
+          </div>
+          <div id="teamSummary" class="mini-metrics"></div>
+          <div id="adminsList" class="admin-list"></div>
+        </section>
+
+        <section id="auditTab" class="tab-panel hidden admin-only">
+          <div class="section-head">
+            <div><h2>Administrative audit</h2><p>Recent sign-ins, account changes, exports, notes, and session administration.</p></div>
+            <button id="refreshAuditButton" class="ghost" type="button">Refresh</button>
+          </div>
+          <div id="auditList" class="audit-list"></div>
+        </section>
+      </section>
+
+      <section id="viewerView" class="viewer hidden">
+        <div class="viewer-head">
+          <button id="backButton" class="ghost" type="button">← Back</button>
+          <div class="viewer-title">
+            <strong id="viewerLabel">Remote session</strong>
+            <span id="viewerStatus" class="status-dot">Waiting</span>
+          </div>
+          <div class="viewer-head-actions">
+            <button id="openTechnicianAppButton" class="ghost" type="button">Open in Technician App</button>
+            <button id="popoutViewerButton" class="ghost" type="button">Pop out</button>
+            <button id="recordViewerButton" class="ghost" type="button">Record</button>
+            <button id="screenshotViewerButton" class="ghost" type="button">Screenshot</button>
+            <button id="toggleSidebarButton" class="ghost" type="button">Hide tools</button>
+            <button id="requestElevationButton" class="ghost" type="button">Request elevation</button>
+            <button id="endSessionButton" class="danger" type="button">End session</button>
+          </div>
+        </div>
+        <div id="viewerControls" class="viewer-controls">
+          <label>Monitor
+            <select id="monitorSelect">
+              <option value="0">Monitor 1</option>
+            </select>
+          </label>
+          <label>Capture
+            <select id="captureModeSelect">
+              <option value="auto" selected>Auto (DXGI preferred)</option>
+              <option value="gdi">Compatibility (GDI)</option>
+            </select>
+          </label>
+          <label>Video
+            <select id="videoTransportSelect">
+              <option value="jpeg" selected>JPEG (compatible)</option>
+              <option id="h264TransportOption" value="h264-annexb" disabled>H.264 (experimental)</option>
+            </select>
+          </label>
+          <label>Resolution
+            <select id="scaleSelect">
+              <option value="100" selected>100%</option>
+              <option value="75">75%</option>
+              <option value="50">50%</option>
+            </select>
+          </label>
+          <label>Quality
+            <select id="qualitySelect">
+              <option value="35">Low</option>
+              <option value="55" selected>Balanced</option>
+              <option value="70">High</option>
+              <option value="85">Very high</option>
+            </select>
+          </label>
+          <label>Frame rate
+            <select id="fpsSelect">
+              <option value="0">Adaptive</option>
+              <option value="2">2 FPS</option>
+              <option value="4">4 FPS</option>
+              <option value="6" selected>6 FPS</option>
+              <option value="8">8 FPS</option>
+              <option value="10">10 FPS</option>
+              <option value="12">12 FPS</option>
+            </select>
+          </label>
+          <div class="viewer-view-buttons">
+            <button id="fitViewButton" class="ghost" type="button">Fit</button>
+            <button id="actualViewButton" class="ghost" type="button">1:1</button>
+            <button id="fullscreenButton" class="ghost" type="button">Fullscreen</button>
+          </div>
+          <div class="viewer-telemetry">
+            <strong id="viewerTelemetry">Waiting for frames</strong>
+            <span id="viewerCaptureState">Capture settings pending</span>
+            <span id="viewerCodecCapability">Video codec probe pending</span>
+          </div>
+        </div>
+        <div class="viewer-grid">
+          <div>
+            <div id="screenWrap" class="screen-wrap fit-mode">
+              <canvas id="remoteCanvas" tabindex="0" aria-label="Remote desktop viewer"></canvas>
+              <div id="screenPlaceholder" class="screen-placeholder">
+                <strong>Waiting for customer</strong>
+                <span>The remote screen will appear after the customer enters the session code and approves access.</span>
+              </div>
+            </div>
+            <div class="viewer-foot">
+              <span id="viewerMachine">No customer connected</span>
+              <span>Click the remote screen before typing. Ctrl+Alt+Del and secure-desktop UAC are not supported yet.</span>
+            </div>
+          </div>
+          <aside class="session-sidebar">
+            <div class="sidebar-card">
+              <h3>Session details</h3>
+              <dl id="sessionFacts" class="facts"></dl>
+            </div>
+            <div id="networkCard" class="sidebar-card">
+              <div class="network-head">
+                <h3>Customer network</h3>
+                <div class="network-head-actions">
+                  <span id="networkUpdated" class="small muted">Waiting for diagnostics</span>
+                  <button id="refreshNetworkButton" class="ghost" type="button">Refresh</button>
+                </div>
+              </div>
+              <dl id="networkSummary" class="facts network-summary">
+                <dt>Public IP</dt><dd>—</dd>
+                <dt>Connection</dt><dd>—</dd>
+              </dl>
+              <div id="networkAdapters" class="network-adapters">
+                <div class="muted small">Network details will appear after the customer connects.</div>
+              </div>
+            </div>
+            <div id="chatCard" class="sidebar-card">
+              <div class="chat-head">
+                <h3>Customer chat</h3>
+                <span id="chatStatus" class="small muted">Connected chat</span>
+              </div>
+              <div id="chatMessages" class="chat-messages">
+                <div class="muted small">No messages yet.</div>
+              </div>
+              <form id="chatForm" class="chat-form">
+                <textarea id="chatBody" maxlength="4000" placeholder="Type a message to the customer…"></textarea>
+                <div class="chat-compose-actions">
+                  <input id="chatImageInput" class="hidden" type="file" accept="image/jpeg,image/png,image/gif">
+                  <button id="chatImageButton" class="ghost" type="button">Picture</button>
+                  <button class="primary" type="submit">Send</button>
+                </div>
+              </form>
+            </div>
+            <div id="fileTransferCard" class="sidebar-card hidden">
+              <h3>File transfer</h3>
+              <p class="small muted">Files are temporary, maximum 25 MB each, and expire from the relay after 30 minutes.</p>
+              <input id="sendFileInput" type="file">
+              <button id="sendFileButton" class="primary file-send-button" type="button">Send file to customer</button>
+              <span id="fileTransferStatus" class="small muted">No active transfer.</span>
+              <div id="incomingFiles" class="incoming-files"></div>
+            </div>
+            <div id="clipboardCard" class="sidebar-card hidden">
+              <h3>Clipboard text</h3>
+              <p class="small muted">Text only, maximum 256 KB. Clipboard access occurs only when you use these controls.</p>
+              <textarea id="remoteClipboardText" class="clipboard-preview" readonly placeholder="Remote clipboard text will appear here."></textarea>
+              <div class="clipboard-actions">
+                <button id="sendClipboardButton" class="ghost" type="button">Send my clipboard</button>
+                <button id="getClipboardButton" class="ghost" type="button">Get remote</button>
+                <button id="copyRemoteClipboardButton" class="ghost" type="button" disabled>Copy remote</button>
+              </div>
+              <span id="clipboardStatus" class="small muted">Clipboard idle.</span>
+            </div>
+            <div class="sidebar-card">
+              <h3>Technician notes</h3>
+              <div id="sessionNotes" class="notes-list"></div>
+              <form id="noteForm" class="note-form">
+                <textarea id="noteBody" maxlength="4000" placeholder="Document troubleshooting, resolution, follow-up, or customer details…"></textarea>
+                <button class="primary" type="submit">Add note</button>
+              </form>
+            </div>
+            <div class="sidebar-card">
+              <h3>Timeline</h3>
+              <div id="sessionTimeline" class="timeline"></div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+
+    <footer><span>Remote Assist · Remote Assist Project</span><span>Attended sessions only · Nashville, Tennessee</span></footer>
+  </div>
+
+  <dialog id="sessionDialog">
+    <form id="sessionForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">NEW SUPPORT SESSION</p><h2>Create a temporary code</h2></div><button type="button" id="closeSessionDialog" class="icon-button" aria-label="Close">×</button></div>
+      <label>Customer / property label<input id="customerLabel" maxlength="160" placeholder="Example: Fairfield Inn front desk"></label>
+      <label class="check"><input id="requestControl" type="checkbox" checked><span><strong>Keyboard and mouse control</strong><small>Customer will be told that control is requested.</small></span></label>
+      <label class="check"><input id="requestClipboard" type="checkbox" checked><span><strong>Clipboard text sync</strong><small>Allows explicit send/get of text clipboard content during the approved session.</small></span></label>
+      <label class="check"><input id="requestFileTransfer" type="checkbox" checked><span><strong>File transfer</strong><small>Allows explicit file send/receive up to 25 MB during the approved session.</small></span></label>
+      <label class="check"><input id="requestElevation" type="checkbox"><span><strong>Administrator elevation may be needed</strong><small>The customer must approve the Windows UAC prompt themselves.</small></span></label>
+      <button class="primary" type="submit">Create session</button>
+      <p id="sessionError" class="error"></p>
+    </form>
+  </dialog>
+
+  <dialog id="codeDialog" class="code-dialog">
+    <div class="dialog-content">
+      <div class="dialog-head"><div><p class="eyebrow">SESSION READY</p><h2>Give this code to the customer</h2></div><button type="button" id="closeCodeDialog" class="icon-button" aria-label="Close">×</button></div>
+      <div id="sessionCode" class="session-code">0000 0000</div>
+      <p>The code is single-use and expires automatically. It is intentionally displayed only when the session is created.</p>
+      <button id="copyCodeButton" class="primary" type="button">Copy code</button>
+    </div>
+  </dialog>
+
+  <dialog id="adminDialog">
+    <form id="adminForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">TEAM ACCESS</p><h2 id="adminDialogTitle">Add support user</h2></div><button type="button" id="closeAdminDialog" class="icon-button" aria-label="Close">×</button></div>
+      <input id="adminId" type="hidden">
+      <label id="adminUsernameLabel">Username<input id="adminUsername" maxlength="48" autocomplete="off" placeholder="jsmith"></label>
+      <label>Display name<input id="adminDisplayName" maxlength="120" placeholder="John Smith"></label>
+      <label>Role<select id="adminRole"><option value="technician">Technician</option><option value="admin">Administrator</option></select></label>
+      <label id="adminPasswordLabel">Temporary password<input id="adminPassword" type="password" minlength="14" maxlength="256" autocomplete="new-password"></label>
+      <label id="adminActiveLabel" class="check hidden"><input id="adminActive" type="checkbox" checked><span><strong>Account active</strong><small>Disabled accounts cannot sign in and existing cookies stop working.</small></span></label>
+      <button class="primary" type="submit">Save user</button>
+      <p id="adminError" class="error"></p>
+    </form>
+  </dialog>
+
+  <dialog id="resetPasswordDialog">
+    <form id="resetPasswordForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">CREDENTIALS</p><h2>Reset password</h2></div><button type="button" id="closeResetPasswordDialog" class="icon-button" aria-label="Close">×</button></div>
+      <input id="resetAdminId" type="hidden">
+      <p id="resetAdminLabel" class="muted"></p>
+      <label>New password<input id="resetPassword" type="password" minlength="14" maxlength="256" autocomplete="new-password"></label>
+      <button class="primary" type="submit">Reset password</button>
+      <p class="small muted">Existing browser sessions for this account will be invalidated.</p>
+      <p id="resetPasswordError" class="error"></p>
+    </form>
+  </dialog>
+
+  <dialog id="accountDialog">
+    <form id="accountForm" method="dialog">
+      <div class="dialog-head"><div><p class="eyebrow">MY ACCOUNT</p><h2>Change password</h2></div><button type="button" id="closeAccountDialog" class="icon-button" aria-label="Close">×</button></div>
+      <label>Current password<input id="currentPassword" type="password" autocomplete="current-password"></label>
+      <label>New password<input id="newPassword" type="password" minlength="14" maxlength="256" autocomplete="new-password"></label>
+      <label>Confirm new password<input id="confirmPassword" type="password" minlength="14" maxlength="256" autocomplete="new-password"></label>
+      <button class="primary" type="submit">Change password</button>
+      <p class="small muted">You will be signed out after the password changes.</p>
+      <p id="accountError" class="error"></p>
+    </form>
+  </dialog>
+</body>
+</html>

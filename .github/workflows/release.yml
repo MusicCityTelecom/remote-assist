@@ -1,0 +1,190 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: true
+      - name: Test and build server
+        run: |
+          go mod download
+          go test ./...
+          go vet ./...
+          mkdir -p dist
+          go build -trimpath -ldflags='-s -w' -o dist/remote-assist-server-linux-amd64 ./cmd/server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-server
+          path: dist/remote-assist-server-linux-amd64
+
+  customer-agent:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish customer agent
+        shell: pwsh
+        run: |
+          dotnet restore agent/RemoteAssist.Agent.csproj
+          dotnet publish agent/RemoteAssist.Agent.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -o dist/agent
+          Copy-Item dist/agent/RemoteAssist.exe dist/Remote-Assist.exe
+          Get-FileHash dist/Remote-Assist.exe -Algorithm SHA256 | Format-List
+      - name: Verify customer executable identity
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'dist/Remote-Assist.exe'
+          $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($exe)
+          Write-Host "ProductName: $($info.ProductName)"
+          Write-Host "CompanyName: $($info.CompanyName)"
+          Write-Host "FileVersion: $($info.FileVersion)"
+          if ($info.ProductName -ne 'Remote Assist') {
+            throw "Unexpected customer ProductName: $($info.ProductName)"
+          }
+          if ($info.CompanyName -ne 'Remote Assist') {
+            throw "Unexpected customer CompanyName: $($info.CompanyName)"
+          }
+          if ($info.FileVersion -ne '0.10.0.0') {
+            throw "Unexpected customer FileVersion: $($info.FileVersion)"
+          }
+          $signature = Get-AuthenticodeSignature $exe
+          Write-Host "Authenticode: $($signature.Status)"
+          if ($signature.SignerCertificate) {
+            Write-Host "Signer subject: $($signature.SignerCertificate.Subject)"
+          } else {
+            Write-Host "Signer subject: (not signed yet)"
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-customer-agent
+          path: dist/Remote-Assist.exe
+
+  technician:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish technician client
+        shell: pwsh
+        run: |
+          dotnet restore technician/RemoteAssist.Technician.csproj
+          dotnet publish technician/RemoteAssist.Technician.csproj `
+            -c Release `
+            -r win-x64 `
+            --self-contained true `
+            -o dist/technician
+          $exe = 'dist/technician/RemoteAssistTechnician.exe'
+          if (-not (Test-Path $exe)) { throw "Technician executable was not published." }
+          $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo((Resolve-Path $exe))
+          Write-Host "ProductName: $($info.ProductName)"
+          Write-Host "CompanyName: $($info.CompanyName)"
+          Write-Host "FileVersion: $($info.FileVersion)"
+          if ($info.ProductName -ne 'Remote Assist Technician') {
+            throw "Unexpected technician ProductName: $($info.ProductName)"
+          }
+          if ($info.CompanyName -ne 'Remote Assist') {
+            throw "Unexpected technician CompanyName: $($info.CompanyName)"
+          }
+          if ($info.FileVersion -ne '0.10.0.0') {
+            throw "Unexpected technician FileVersion: $($info.FileVersion)"
+          }
+          $signature = Get-AuthenticodeSignature $exe
+          Write-Host "Authenticode: $($signature.Status)"
+          if ($signature.SignerCertificate) {
+            Write-Host "Signer subject: $($signature.SignerCertificate.Subject)"
+          } else {
+            Write-Host "Signer subject: (not signed yet)"
+          }
+
+      - name: Build technician portable ZIP
+        shell: pwsh
+        run: |
+          Compress-Archive `
+            -Path dist/technician/* `
+            -DestinationPath dist/Remote-Assist-Technician-Portable.zip `
+            -Force
+          Get-FileHash dist/Remote-Assist-Technician-Portable.zip -Algorithm SHA256 | Format-List
+
+      - name: Build technician installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup -y --no-progress
+          }
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { throw "Inno Setup compiler not found." }
+
+          New-Item -ItemType Directory -Force -Path dist/installer | Out-Null
+          $publish = (Resolve-Path dist/technician).Path
+          $output = (Resolve-Path dist/installer).Path
+
+          & $iscc `
+            "/DPublishDir=$publish" `
+            "/DOutputDir=$output" `
+            technician/installer.iss
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup failed with exit $LASTEXITCODE"
+          }
+
+          $installerSource = Get-Content technician/installer.iss -Raw
+          if ($installerSource -notmatch '#define MyAppVersion "0\.10\.0-preview"') {
+            throw "Technician installer AppVersion is not 0.10.0-preview."
+          }
+          $installer = 'dist/installer/Remote-Assist-Technician-Setup.exe'
+          if (-not (Test-Path $installer)) { throw "Technician installer was not created." }
+          Copy-Item $installer dist/Remote-Assist-Technician-Setup.exe -Force
+          Get-FileHash dist/Remote-Assist-Technician-Setup.exe -Algorithm SHA256 | Format-List
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-technician
+          path: |
+            dist/Remote-Assist-Technician-Portable.zip
+            dist/Remote-Assist-Technician-Setup.exe
+
+  release:
+    needs: [server, customer-agent, technician]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release
+
+      - name: Generate SHA-256 manifest
+        run: |
+          cd release
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -printf '%f\n' | sort | while read -r file; do
+            sha256sum "$file"
+          done > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          prerelease: true
+          files: release/*
