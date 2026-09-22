@@ -6,6 +6,8 @@ coverage.out
 # .NET
 agent/bin/
 agent/obj/
+technician/bin/
+technician/obj/
 *.user
 *.suo
 
