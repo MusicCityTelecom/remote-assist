@@ -12,7 +12,7 @@
 #define MyAppExeName "RemoteAssistTechnician.exe"
 
 [Setup]
-AppId={{F6D48E10-1836-4F33-9A54-88C8935C247A}
+AppId={{36A94D17-FB0A-4CE1-9131-BCF6562BCE29}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
@@ -20,7 +20,7 @@ DefaultDirName={autopf}\Remote Assist\Support Technician
 DefaultGroupName=Remote Assist
 DisableProgramGroupPage=yes
 OutputDir={#OutputDir}
-OutputBaseFilename=Remote Assist-Support-Technician-Setup
+OutputBaseFilename=Remote-Assist-Technician-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
